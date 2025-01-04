@@ -37,17 +37,8 @@ project_number = st.text_input("Project Number")
 glass_offset = st.number_input("Enter Glass Offset (mm)", value=4.76, step=0.01)
 
 # ==================== Template File ====================
-template_data = {
-    "VGA Width mm": [],
-    "VGA Height mm": [],
-    "Joint Left": [],
-    "Joint Right": [],
-    "Joint Top": [],
-    "Joint Bottom": [],
-    "Qty": [],
-    "Type": []
-}
-template_df = pd.DataFrame(template_data)
+template_path = "IGR_testfile.csv"
+template_df = pd.read_csv(template_path)
 
 template_file = BytesIO()
 with pd.ExcelWriter(template_file, engine="xlsxwriter") as writer:
