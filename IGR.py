@@ -36,6 +36,34 @@ project_number = st.text_input("Project Number")
 # Input for Glass Offset in mm
 glass_offset = st.number_input("Enter Glass Offset (mm)", value=4.76, step=0.01)
 
+# ==================== Template File ====================
+template_data = {
+    "VGA Width mm": [],
+    "VGA Height mm": [],
+    "Joint Left": [],
+    "Joint Right": [],
+    "Joint Top": [],
+    "Joint Bottom": [],
+    "Qty": [],
+    "Type": []
+}
+template_df = pd.DataFrame(template_data)
+
+template_file = BytesIO()
+with pd.ExcelWriter(template_file, engine="xlsxwriter") as writer:
+    worksheet = writer.book.add_worksheet("Template")
+    worksheet.insert_image("A1", "ilogo.png", {"x_scale": 0.2, "y_scale": 0.2})
+    worksheet.write("A5", "Template File")
+    worksheet.write("A6", "Date Created:")
+    worksheet.write("B6", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    template_df.to_excel(writer, index=False, sheet_name="Template", startrow=10)
+
+st.download_button(
+    "Download Template File",
+    data=template_file.getvalue(),
+    file_name="Template_File.xlsx"
+)
+
 # File Upload: Openings
 st.subheader("Upload Openings Data")
 uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
@@ -76,8 +104,36 @@ if uploaded_file:
     ]
     summary_df = df[summary_columns]
 
+    # Define the variables and their explanations for the Variables tab
+    variables_data = {
+        "Variable Name": summary_columns,
+        "Explanation": [
+            "Read from uploaded file" if col in [
+                "VGA Width mm", "VGA Height mm", "Joint Left", "Joint Right", "Joint Top", "Joint Bottom", "Qty", "Type"
+            ] else
+            "Calculated: VGA Width mm - Joint Left - Joint Right" if col == "GS Width mm" else
+            "Calculated: VGA Height mm - Joint Top - Joint Bottom" if col == "GS Height mm" else
+            "Calculated: GS Width mm * mm_to_inches" if col == "GS Width in" else
+            "Calculated: GS Height mm * mm_to_inches" if col == "GS Height in" else
+            "Calculated: GS Width mm (directly from columns)" if col in ["SSP Top", "SSP Bottom"] else
+            "Calculated: GS Height mm - profile_width - profile_height - (2 * 0.15)" if col in ["SSP Left", "SSP Right"] else
+            "Calculated: GS Width mm - (2 * glass_offset)" if col == "Framed G Width mm" else
+            "Calculated: GS Height mm - (2 * glass_offset)" if col == "Framed G Height mm" else
+            "Predefined constant: 12 inches in mm" if col == "L1" else
+            "Predefined constant: 2 inches in mm" if col == "L2" else
+            "Calculated: Floor((SSP Top - (2 * 25.4)) / L1)" if col == "Qty1" else
+            "Calculated: Floor((SSP Top - (2 * 25.4) - (Qty1 * L1)) / L2)" if col == "Qty2" else
+            "Calculated: L1 * Qty1" if col == "TL1" else
+            "Calculated: L2 * Qty2" if col == "TL2" else
+            "Unknown (custom column)"
+            for col in summary_columns
+        ]
+    }
+    variables_df = pd.DataFrame(variables_data)
+
     summary_file = BytesIO()
     with pd.ExcelWriter(summary_file, engine="xlsxwriter") as writer:
+        # First tab: Summary
         worksheet = writer.book.add_worksheet("Summary")
         worksheet.insert_image("A1", "ilogo.png", {"x_scale": 0.2, "y_scale": 0.2})
         worksheet.write("A5", "Project Name:")
@@ -87,6 +143,9 @@ if uploaded_file:
         worksheet.write("B6", project_number)
         worksheet.write("B7", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         summary_df.to_excel(writer, index=False, sheet_name="Summary", startrow=10)
+
+        # Second tab: Variables
+        variables_df.to_excel(writer, index=False, sheet_name="Variables")
 
     # ==================== Glass File ====================
     glass_df = pd.DataFrame({
