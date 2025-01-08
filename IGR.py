@@ -40,19 +40,11 @@ glass_offset = st.number_input("Enter Glass Offset (mm)", value=4.76, step=0.01)
 template_path = "IGR_testfile.csv"
 template_df = pd.read_csv(template_path)
 
-template_file = BytesIO()
-with pd.ExcelWriter(template_file, engine="xlsxwriter") as writer:
-    worksheet = writer.book.add_worksheet("Template")
-    worksheet.insert_image("A1", "ilogo.png", {"x_scale": 0.2, "y_scale": 0.2})
-    worksheet.write("A5", "Template File")
-    worksheet.write("A6", "Date Created:")
-    worksheet.write("B6", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-    template_df.to_excel(writer, index=False, sheet_name="Template", startrow=10)
-
+# Provide the original IGR_testfile.csv without alterations
 st.download_button(
     "Download Template File",
-    data=template_file.getvalue(),
-    file_name="Template_File.xlsx"
+    data=open(template_path, "rb").read(),
+    file_name="IGR_testfile.csv"
 )
 
 # File Upload: Openings
@@ -95,36 +87,8 @@ if uploaded_file:
     ]
     summary_df = df[summary_columns]
 
-    # Define the variables and their explanations for the Variables tab
-    variables_data = {
-        "Variable Name": summary_columns,
-        "Explanation": [
-            "Read from uploaded file" if col in [
-                "VGA Width mm", "VGA Height mm", "Joint Left", "Joint Right", "Joint Top", "Joint Bottom", "Qty", "Type"
-            ] else
-            "Calculated: VGA Width mm - Joint Left - Joint Right" if col == "GS Width mm" else
-            "Calculated: VGA Height mm - Joint Top - Joint Bottom" if col == "GS Height mm" else
-            "Calculated: GS Width mm * mm_to_inches" if col == "GS Width in" else
-            "Calculated: GS Height mm * mm_to_inches" if col == "GS Height in" else
-            "Calculated: GS Width mm (directly from columns)" if col in ["SSP Top", "SSP Bottom"] else
-            "Calculated: GS Height mm - profile_width - profile_height - (2 * 0.15)" if col in ["SSP Left", "SSP Right"] else
-            "Calculated: GS Width mm - (2 * glass_offset)" if col == "Framed G Width mm" else
-            "Calculated: GS Height mm - (2 * glass_offset)" if col == "Framed G Height mm" else
-            "Predefined constant: 12 inches in mm" if col == "L1" else
-            "Predefined constant: 2 inches in mm" if col == "L2" else
-            "Calculated: Floor((SSP Top - (2 * 25.4)) / L1)" if col == "Qty1" else
-            "Calculated: Floor((SSP Top - (2 * 25.4) - (Qty1 * L1)) / L2)" if col == "Qty2" else
-            "Calculated: L1 * Qty1" if col == "TL1" else
-            "Calculated: L2 * Qty2" if col == "TL2" else
-            "Unknown (custom column)"
-            for col in summary_columns
-        ]
-    }
-    variables_df = pd.DataFrame(variables_data)
-
     summary_file = BytesIO()
     with pd.ExcelWriter(summary_file, engine="xlsxwriter") as writer:
-        # First tab: Summary
         worksheet = writer.book.add_worksheet("Summary")
         worksheet.insert_image("A1", "ilogo.png", {"x_scale": 0.2, "y_scale": 0.2})
         worksheet.write("A5", "Project Name:")
@@ -134,9 +98,6 @@ if uploaded_file:
         worksheet.write("B6", project_number)
         worksheet.write("B7", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         summary_df.to_excel(writer, index=False, sheet_name="Summary", startrow=10)
-
-        # Second tab: Variables
-        variables_df.to_excel(writer, index=False, sheet_name="Variables")
 
     # ==================== Glass File ====================
     glass_df = pd.DataFrame({
@@ -160,14 +121,14 @@ if uploaded_file:
         worksheet.write("B7", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         glass_df.to_excel(writer, index=False, sheet_name="Glass", startrow=10)
 
-    # ==================== AggCutOnly File ====================
+    # ==================== Cutfile ====================
     df["Qty x 2"] = df["Qty"] * 2
     width_counts = df.groupby("Framed G Width in")["Qty"].sum().sort_values(ascending=False)
     height_counts = df.groupby("Framed G Height in")["Qty"].sum().sort_values(ascending=False)
     unique_dimensions = pd.Index(width_counts.index.tolist() + height_counts.index.tolist()).unique()
 
     agg_df = pd.DataFrame(0, index=unique_dimensions, columns=["Part #", "Miter"] + df["Type"].unique().tolist() + ["Total QTY"])
-    agg_df["Part #"] = f"IGR-{project_number}"
+    agg_df["Part #"] = f"IGR-{project_name}-{project_number}"
     agg_df["Miter"] = "**"
 
     for i, row in df.iterrows():
