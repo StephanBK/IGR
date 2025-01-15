@@ -64,11 +64,11 @@ if uploaded_file:
     df["GS Height in"] = df["GS Height mm"] * mm_to_inches
     df["SSP Top"] = df["GS Width mm"]
     df["SSP Bottom"] = df["GS Width mm"]
-    df["SSP Left"] = df["GS Height mm"] - profile_width - profile_height - (2 * 0.15)
+    df["SSP Left"] = df["GS Height mm"] - (2 * profile_width)
     df["SSP Right"] = df["SSP Left"]
     df["UPP Top"] = df["GS Width mm"]  # Same as GS Width mm
     df["UPP Bottom"] = df["GS Width mm"]  # Same as GS Width mm
-    df["UPP Left"] = df["GS Height mm"] - (2 * 0.15)  # GS Height mm minus 2 * 0.15
+    df["UPP Left"] = df["GS Height mm"]  # GS Height mm minus 2 * 0.15
     df["UPP Right"] = df["UPP Left"]  # Same as UPP Left
     df["Framed G Width mm"] = df["GS Width mm"] - (2 * glass_offset)
     df["Framed G Height mm"] = df["GS Height mm"] - (2 * glass_offset)
