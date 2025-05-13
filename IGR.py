@@ -11,19 +11,13 @@ sq_inches_to_sq_feet = 1 / 144
 
 # Layout: Title and Logo Side by Side
 col1, col2 = st.columns([2, 1])
-
 with col1:
     st.title("IGR CUT")
-
 with col2:
     st.image("ilogo.png", width=100)
 
 # Predefined Profile Data
-profiles = {
-    "01401": {"Width": 38, "Height": 7.85},
-}
-
-# Fixed Profile Data
+profiles = {"01401": {"Width": 38, "Height": 7.85}}
 profile_01401 = profiles["01401"]
 profile_width = profile_01401["Width"]
 profile_height = profile_01401["Height"]
@@ -31,216 +25,183 @@ profile_height = profile_01401["Height"]
 # User Input: Project Details
 st.subheader("Enter Project Details")
 project_name = st.text_input("Project Name")
-project_number = st.text_input("Project Number", value="INO-")  # Prefill with "INO-"
+project_number = st.text_input("Project Number", value="INO-")
 
 # Input for Glass Offset in mm
 glass_offset = st.number_input("Enter Glass Offset (mm)", value=4.76, step=0.01)
 
-# ==================== Template File ====================
+# Template File
 template_path = "IGR_testfile.csv"
-template_df = pd.read_csv(template_path)
-
-# Provide the original IGR_testfile.csv without alterations
 st.download_button(
     "Download Template File",
     data=open(template_path, "rb").read(),
     file_name="IGR_testfile.csv"
 )
 
-# File Upload: Openings
+# File Upload
 st.subheader("Upload Openings Data")
 uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
 
 if uploaded_file:
-    # Load the uploaded file into a DataFrame
+    # Load data
     df = pd.read_csv(uploaded_file)
     st.write("**Uploaded Data:**")
     st.dataframe(df)
 
-    # Add calculated columns
-    df["GS Width mm"] = df["VGA Width mm"] - df["Joint Left"] - df["Joint Right"]
-    df["GS Height mm"] = df["VGA Height mm"] - df["Joint Top"] - df["Joint Bottom"]
+    # Convert inputs to mm
+    df["VGA Width mm"] = df["VGA Width in"] * inches_to_mm
+    df["VGA Height mm"] = df["VGA Height in"] * inches_to_mm
+    df["Joint Left mm"] = df["Joint Left"] * inches_to_mm
+    df["Joint Right mm"] = df["Joint Right"] * inches_to_mm
+    df["Joint Top mm"] = df["Joint Top"] * inches_to_mm
+    df["Joint Bottom mm"] = df["Joint Bottom"] * inches_to_mm
+
+    # Main Calculations
+    df["GS Width mm"] = df["VGA Width mm"] - df["Joint Left mm"] - df["Joint Right mm"]
+    df["GS Height mm"] = df["VGA Height mm"] - df["Joint Top mm"] - df["Joint Bottom mm"]
     df["GS Width in"] = df["GS Width mm"] * mm_to_inches
     df["GS Height in"] = df["GS Height mm"] * mm_to_inches
+
+    # SSP Calculations
     df["SSP Top"] = df["GS Width mm"]
     df["SSP Bottom"] = df["GS Width mm"]
     df["SSP Left"] = df["GS Height mm"] - (2 * profile_width)
     df["SSP Right"] = df["SSP Left"]
-    df["UPP Top"] = df["GS Width mm"]  # Same as GS Width mm
-    df["UPP Bottom"] = df["GS Width mm"]  # Same as GS Width mm
-    df["UPP Left"] = df["GS Height mm"]  # GS Height mm minus 2 * 0.15
-    df["UPP Right"] = df["UPP Left"]  # Same as UPP Left
+
+    # UPP Calculations
+    df["UPP Top"] = df["GS Width mm"]
+    df["UPP Bottom"] = df["GS Width mm"]
+    df["UPP Left"] = df["GS Height mm"]
+    df["UPP Right"] = df["UPP Left"]
+
+    # Framed Glass Calculations
     df["Framed G Width mm"] = df["GS Width mm"] - (2 * glass_offset)
     df["Framed G Height mm"] = df["GS Height mm"] - (2 * glass_offset)
-    df["Framed G Width in"] = np.round((df["Framed G Width mm"] * mm_to_inches) * 16) / 16
-    df["Framed G Height in"] = np.round((df["Framed G Height mm"] * mm_to_inches) * 16) / 16
+    df["Framed G Width in"] = np.round(df["Framed G Width mm"] * mm_to_inches * 16) / 16
+    df["Framed G Height in"] = np.round(df["Framed G Height mm"] * mm_to_inches * 16) / 16
+
+    # Profile Length Calculations
     df["L1"] = 12 * inches_to_mm
     df["L2"] = 2 * inches_to_mm
     df["Qty1"] = np.floor((df["SSP Top"] - (2 * 25.4)) / df["L1"]).astype(int)
-    df["Qty2"] = np.floor(
-        (df["SSP Top"] - (2 * 25.4) - (df["Qty1"] * df["L1"])) / df["L2"]
-    ).astype(int)
+    df["Qty2"] = np.floor((df["SSP Top"] - (2 * 25.4) - (df["Qty1"] * df["L1"])) / df["L2"]).astype(int)
     df["TL1"] = df["L1"] * df["Qty1"]
     df["TL2"] = df["L2"] * df["Qty2"]
 
-    # ==================== Summary File ====================
-    summary_columns = list(df.columns) + [
-        "GS Width mm", "GS Height mm", "GS Width in", "GS Height in", "SSP Top", "SSP Bottom", "SSP Left",
-        "SSP Right", "Framed G Width in", "Framed G Height in", "Framed G Width mm", "Framed G Height mm",
-        "L1", "L2", "Qty1", "Qty2", "TL1", "TL2"
-    ]
-    summary_df = df[summary_columns]
-
+    # ===== Summary File =====
     summary_file = BytesIO()
     with pd.ExcelWriter(summary_file, engine="xlsxwriter") as writer:
-        worksheet = writer.book.add_worksheet("Summary")
-        worksheet.insert_image("A1", "ilogo.png", {"x_scale": 0.2, "y_scale": 0.2})
-        worksheet.write("A5", "Project Name:")
-        worksheet.write("A6", "Project Number:")
-        worksheet.write("A7", "Date Created:")
-        worksheet.write("B5", project_name)
-        worksheet.write("B6", project_number)
-        worksheet.write("B7", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        summary_df.to_excel(writer, index=False, sheet_name="Summary", startrow=10)
+        # Summary sheet
+        ws = writer.book.add_worksheet("Summary")
+        ws.insert_image("A1", "ilogo.png", {"x_scale": 0.2, "y_scale": 0.2})
+        ws.write("A5", "Project Name:")
+        ws.write("B5", project_name)
+        ws.write("A6", "Project Number:")
+        ws.write("B6", project_number)
+        ws.write("A7", "Date Created:")
+        ws.write("B7", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        df.to_excel(writer, sheet_name="Summary", index=False, startrow=10)
+        # Parameters sheet
+        param_ws = writer.book.add_worksheet("Parameters")
+        param_ws.write("A1", "Glass Offset (mm)")
+        param_ws.write("B1", glass_offset)
 
-    # ==================== Glass File ====================
+    # ===== Glass File =====
     glass_df = pd.DataFrame({
         "Item": range(1, len(df) + 1),
         "Glass Width in": df["Framed G Width in"],
         "Glass Height in": df["Framed G Height in"],
-        "Area Each (ft²)": (df["Framed G Width in"] * df["Framed G Height in"]) * sq_inches_to_sq_feet,
+        "Area Each (ft²)": df["Framed G Width in"] * df["Framed G Height in"] * sq_inches_to_sq_feet,
         "Qty": df["Qty"],
-        "Area Total (ft²)": df["Qty"] * (df["Framed G Width in"] * df["Framed G Height in"]) * sq_inches_to_sq_feet,
+        "Area Total (ft²)": df["Qty"] * df["Framed G Width in"] * df["Framed G Height in"] * sq_inches_to_sq_feet
     })
-
-
-    # Add rounded columns for Glass Width and Height
-    def format_as_sixteenths(value):
-        rounded = round(value * 16)  # Round to nearest 1/16
-        numerator = rounded % 16  # Get the numerator
-        whole_number = rounded // 16  # Get the whole number part
-        if numerator == 0:
-            return f"{whole_number}"  # No fractional part
-        return f"{whole_number} {numerator}/16" if whole_number > 0 else f"{numerator}/16"
-
-
-    glass_df["Glass Width (Nearest 1/16 in)"] = glass_df["Glass Width in"].apply(format_as_sixteenths)
-    glass_df["Glass Height (Nearest 1/16 in)"] = glass_df["Glass Height in"].apply(format_as_sixteenths)
-
-    # Reorder columns to place the new ones after their respective originals
-    column_order = [
+    def fmt16(v):
+        r = round(v * 16)
+        n = r % 16
+        w = r // 16
+        if n == 0:
+            return f"{w}"
+        return f"{w} {n}/16" if w > 0 else f"{n}/16"
+    glass_df["Glass Width (Nearest 1/16 in)"] = glass_df["Glass Width in"].apply(fmt16)
+    glass_df["Glass Height (Nearest 1/16 in)"] = glass_df["Glass Height in"].apply(fmt16)
+    cols = [
         "Item",
         "Glass Width in",
-        "Glass Width (Nearest 1/16 in)",  # New column after Glass Width in
+        "Glass Width (Nearest 1/16 in)",
         "Glass Height in",
-        "Glass Height (Nearest 1/16 in)",  # New column after Glass Height in
+        "Glass Height (Nearest 1/16 in)",
         "Area Each (ft²)",
         "Qty",
         "Area Total (ft²)"
     ]
-    glass_df = glass_df[column_order]
-
-    # Write the glass file to an Excel file
+    glass_df = glass_df[cols]
     glass_file = BytesIO()
     with pd.ExcelWriter(glass_file, engine="xlsxwriter") as writer:
-        worksheet = writer.book.add_worksheet("Glass")
-        worksheet.insert_image("A1", "ilogo.png", {"x_scale": 0.2, "y_scale": 0.2})
-        worksheet.write("A5", "Project Name:")
-        worksheet.write("A6", "Project Number:")
-        worksheet.write("A7", "Date Created:")
-        worksheet.write("B5", project_name)
-        worksheet.write("B6", project_number)
-        worksheet.write("B7", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        glass_df.to_excel(writer, index=False, sheet_name="Glass", startrow=10)
-    # ==================== Cutfile ====================
-    cutlist_data = []
+        # Glass sheet
+        ws = writer.book.add_worksheet("Glass")
+        ws.insert_image("A1", "ilogo.png", {"x_scale": 0.2, "y_scale": 0.2})
+        ws.write("A5", "Project Name:")
+        ws.write("B5", project_name)
+        ws.write("A6", "Project Number:")
+        ws.write("B6", project_number)
+        ws.write("A7", "Date Created:")
+        ws.write("B7", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        glass_df.to_excel(writer, sheet_name="Glass", index=False, startrow=10)
+        # Parameters sheet
+        param_ws = writer.book.add_worksheet("Parameters")
+        param_ws.write("A1", "Glass Offset (mm)")
+        param_ws.write("B1", glass_offset)
 
-    # Add rows for Support Spacer Profile first
+    # ===== Cutfile =====
+    cutlist = []
     for _, row in df.iterrows():
-        for position in ["Top", "Bottom", "Left", "Right"]:
-            # Map position to corresponding SSP column
-            column_name = f"SSP {position}"
-            if column_name in df:
-                length_mm = row[column_name]
-            else:
-                st.warning(f"Column {column_name} not found, skipping.")
-                length_mm = 0
-
-            # Assign Profile # based on position
-            if position == "Top":
-                profile_number = "1401"
-            elif position == "Bottom":
-                profile_number = "1501"
-            elif position == "Left":
-                profile_number = "1101"
-            elif position == "Right":
-                profile_number = "1101"
-
-            # Create a dictionary for each row in the cutlist for SSP
-            cutlist_data.append({
-                "Item": len(cutlist_data) + 1,  # Running number
-                "Type": "Aluminium Profile",  # Fixed value
-                "Profile #": profile_number,  # Assigned Profile #
-                "Description": "Support Spacer Profile",  # Fixed value
-                "Position": position,  # Position from the column name
-                "Qty": row["Qty"],  # Quantity from the initial DataFrame
-                "Length (mm)": length_mm,  # Length in mm
-                "Length (in)": length_mm * mm_to_inches,  # Length in inches
-                "Cutting Angle": 90,  # Fixed value
+        # SSP cutlist
+        for pos, prof, angle in zip(["Top", "Bottom", "Left", "Right"], ["1401", "1501", "1101", "1101"], [90, 90, 90, 90]):
+            length = row.get(f"SSP {pos}", 0)
+            cutlist.append({
+                "Item": len(cutlist) + 1,
+                "Type": "Aluminium Profile",
+                "Profile #": prof,
+                "Description": "Support Spacer Profile",
+                "Position": pos,
+                "Qty": row["Qty"],
+                "Length (mm)": length,
+                "Length (in)": length * mm_to_inches,
+                "Cutting Angle": angle
             })
-
-    # Add rows for Unitized Panel Profile next
-    for _, row in df.iterrows():
-        for position in ["Top", "Bottom", "Left", "Right"]:
-            # Map position to corresponding UPP column
-            column_name = f"UPP {position}"
-            if column_name in df:
-                length_mm = row[column_name]
-            else:
-                st.warning(f"Column {column_name} not found, skipping.")
-                length_mm = 0
-
-            # Assign Profile # based on position
-            if position == "Top":
-                profile_number = "2601"
-            elif position == "Bottom":
-                profile_number = "2701"
-            elif position == "Left":
-                profile_number = "2201"
-            elif position == "Right":
-                profile_number = "2301"
-
-            # Create a dictionary for each row in the cutlist for UPP
-            cutlist_data.append({
-                "Item": len(cutlist_data) + 1,  # Running number
-                "Type": "Aluminium Profile",  # Fixed value
-                "Profile #": profile_number,  # Assigned Profile #
-                "Description": "Unitized Panel Profile",  # Fixed value
-                "Position": position,  # Position from the column name
-                "Qty": row["Qty"],  # Quantity from the initial DataFrame
-                "Length (mm)": length_mm,  # Length in mm
-                "Length (in)": length_mm * mm_to_inches,  # Length in inches
-                "Cutting Angle": 45,  # Fixed value
+        # UPP cutlist
+        for pos, prof in zip(["Top", "Bottom", "Left", "Right"], ["2601", "2701", "2201", "2301"]):
+            length = row.get(f"UPP {pos}", 0)
+            cutlist.append({
+                "Item": len(cutlist) + 1,
+                "Type": "Aluminium Profile",
+                "Profile #": prof,
+                "Description": "Unitized Panel Profile",
+                "Position": pos,
+                "Qty": row["Qty"],
+                "Length (mm)": length,
+                "Length (in)": length * mm_to_inches,
+                "Cutting Angle": 45
             })
-
-    # Convert cutlist_data to a DataFrame
-    cutlist_df = pd.DataFrame(cutlist_data)
-
-    # Write the cutlist to an Excel file
+    cutlist_df = pd.DataFrame(cutlist)
     cutfile = BytesIO()
     with pd.ExcelWriter(cutfile, engine="xlsxwriter") as writer:
-        worksheet = writer.book.add_worksheet("Cutfile")
-        worksheet.insert_image("A1", "ilogo.png", {"x_scale": 0.2, "y_scale": 0.2})
-        worksheet.write("A5", "Project Name:")
-        worksheet.write("A6", "Project Number:")
-        worksheet.write("A7", "Date Created:")
-        worksheet.write("B5", project_name)
-        worksheet.write("B6", project_number)
-        worksheet.write("B7", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        cutlist_df.to_excel(writer, index=False, sheet_name="Cutfile", startrow=10)
+        # Cutfile sheet
+        ws = writer.book.add_worksheet("Cutfile")
+        ws.insert_image("A1", "ilogo.png", {"x_scale": 0.2, "y_scale": 0.2})
+        ws.write("A5", "Project Name:")
+        ws.write("B5", project_name)
+        ws.write("A6", "Project Number:")
+        ws.write("B6", project_number)
+        ws.write("A7", "Date Created:")
+        ws.write("B7", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        cutlist_df.to_excel(writer, sheet_name="Cutfile", index=False, startrow=10)
+        # Parameters sheet
+        param_ws = writer.book.add_worksheet("Parameters")
+        param_ws.write("A1", "Glass Offset (mm)")
+        param_ws.write("B1", glass_offset)
 
-    # ==================== Download Buttons ====================
-    # ==================== Download Buttons ====================
+    # Download Buttons
     st.download_button("Download Summary File", data=summary_file.getvalue(), file_name=f"{project_number}_IGR_Summary_File.xlsx")
     st.download_button("Download Glass File", data=glass_file.getvalue(), file_name=f"{project_number}_IGR_Glass_File.xlsx")
     st.download_button("Download Cutfile", data=cutfile.getvalue(), file_name=f"{project_number}_IGR_Cutfile.xlsx")
